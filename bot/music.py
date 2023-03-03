@@ -103,8 +103,7 @@ class Music(commands.Cog):
                     else:
                         embed = discord.Embed(
                             title=entry['title'],
-                            url=entry['original_url'],
-                            color=15548997
+                            url=entry['original_url']
                         )
                         embed.set_author(name='Трек добавлен в очередь')
                         embed.add_field(name='Запрошено пользователем :', value=f'`{interaction.user}`', inline=True)
