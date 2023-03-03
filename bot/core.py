@@ -37,7 +37,7 @@ class DiscordBot(commands.Bot):
                 )
             self.cogs[Music.__name__].queue[before.channel.guild.id] = []
             if self.get_guild(before.channel.guild.id).voice_client:
-                await self.get_guild(before.channel.guild.id).voice_client.disconnect(force=False)
+                await self.get_guild(before.channel.guild.id).voice_client.disconnect(force=True)
 
 
 if __name__ == '__main__':
