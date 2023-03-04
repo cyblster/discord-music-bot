@@ -2,7 +2,7 @@ import asyncio
 import discord
 import validators
 
-from discord import Guild, User, VoiceState, Interaction, WebhookMessage, Embed, FFmpegPCMAudio
+from discord import Guild, Member, VoiceState, Interaction, WebhookMessage, Embed, FFmpegPCMAudio
 from discord.ext import commands
 from discord.ui import View, Select
 from yt_dlp import YoutubeDL
@@ -63,10 +63,7 @@ class MusicCog(commands.Cog):
                 embed=PlayNowEmbed(
                     self.queue[guild_id][0]['interaction'].user,
                     self.queue[guild_id][0]['source']
-                )
-            )
-            await self.queue[guild_id][0]['interaction'].followup.edit_message(
-                message_id=self.queue[guild_id][0]['message'].id,
+                ),
                 view=MusicControlView(self, self.queue[guild_id][0]['interaction'])
             )
 
@@ -80,6 +77,16 @@ class MusicCog(commands.Cog):
     @staticmethod
     def is_user_connected(interaction: Interaction) -> bool:
         return True if interaction.user.voice else False
+
+    @staticmethod
+    def is_user_with_bot(bot: Bot, interaction: Interaction) -> bool:
+        if not MusicCog.is_user_connected(interaction):
+            return False
+        if interaction.user.voice.channel != bot.get_channel(
+            interaction.user.voice.channel.id
+        ).guild.voice_client.channel:
+            return False
+        return True
 
     @staticmethod
     async def safe_connect(bot: Bot, interaction: Interaction) -> None:
@@ -106,7 +113,7 @@ class MusicCog(commands.Cog):
         self.queue.pop(guild.id)
 
     @commands.Cog.listener()
-    async def on_voice_state_update(self, user: User, before: VoiceState, after: VoiceState) -> None:
+    async def on_voice_state_update(self, user: Member, before: VoiceState, after: VoiceState) -> None:
         if user == self.bot.user and after.channel is None:
             if self.bot.get_guild(before.channel.guild.id).voice_client:
                 self.bot.get_guild(before.channel.guild.id).voice_client.cleanup()
@@ -117,6 +124,9 @@ class MusicCog(commands.Cog):
     @discord.app_commands.command(name='play', description='Запустить музыку с YouTube')
     @discord.app_commands.describe(search='Введите строку для поиска или URL')
     async def command_play(self, interaction: Interaction, search: str) -> None:
+        if not self.is_user_connected(interaction):
+            return
+
         await interaction.response.defer()
 
         with YoutubeDL(self.YDL_OPTIONS) as ydl:
@@ -131,13 +141,13 @@ class MusicCog(commands.Cog):
                 entries = ydl.extract_info(f'ytsearch5:{search}', download=False)['entries']
                 await interaction.followup.send(
                     embed=SearchEmbed(entries),
-                    view=MusicSelectView(self, entries=entries)
+                    view=MusicSelectView(self, interaction=interaction, entries=entries)
                 )
 
 
 class MusicSelectView(View):
     def __init__(self, cog: MusicCog = None, interaction: Interaction = None, entries: dict = None,
-                 timeout: float or None = 30.0, enabled: bool = True):
+                 timeout: Optional[float] = 30.0, enabled: bool = True):
         self.__interaction = interaction
 
         super().__init__(timeout=timeout)
@@ -171,8 +181,9 @@ class MusicSelect(Select):
             if self.__cog.is_first_track(interaction.guild_id):
                 await self.__cog.play_track(interaction.guild_id, first_track=True)
             else:
-                await interaction.followup.send(embed=PlayQueueEmbed(
-                    interaction.user, self.__entries[int(self.values[0])]))
+                if self.__cog.is_user_with_bot(self.__cog.bot, interaction):
+                    await interaction.followup.send(embed=PlayQueueEmbed(
+                        interaction.user, self.__entries[int(self.values[0])]))
 
 
 class MusicSelectDisabled(Select):
@@ -185,10 +196,10 @@ class MusicControlView(discord.ui.View):
         super().__init__(timeout=None)
 
         if enabled:
-            self.add_item(MusicControlButtonNext(cog.bot, interaction))
-            self.add_item(MusicControlButtonQueue(cog.queue, interaction))
+            self.add_item(MusicControlButtonNext(cog, interaction))
+            self.add_item(MusicControlButtonQueue(cog, interaction))
             self.add_item(MusicControlButtonStub())
-            self.add_item(MusicControlButtonDisconnect(cog.bot, interaction))
+            self.add_item(MusicControlButtonDisconnect(cog, interaction))
         else:
             self.add_item(MusicControlButtonNext(disabled=True))
             self.add_item(MusicControlButtonQueue(disabled=True))
@@ -197,8 +208,8 @@ class MusicControlView(discord.ui.View):
 
 
 class MusicControlButtonNext(discord.ui.Button):
-    def __init__(self, bot: Bot = None, interaction: Interaction = None, disabled: bool = False):
-        self.__bot = bot
+    def __init__(self, cog: MusicCog = None, interaction: Interaction = None, disabled: bool = False):
+        self.__cog = cog
         self.__interaction = interaction
 
         super().__init__(emoji='⏭', label='Пропустить', style=discord.ButtonStyle.gray, disabled=disabled)
@@ -206,12 +217,13 @@ class MusicControlButtonNext(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
 
-        self.__bot.get_guild(interaction.guild_id).voice_client.stop()
+        if MusicCog.is_user_with_bot(self.__cog.bot, self.__interaction):
+            self.__cog.bot.get_guild(interaction.guild_id).voice_client.stop()
 
 
 class MusicControlButtonQueue(discord.ui.Button):
-    def __init__(self, queue: dict = None, interaction: Interaction = None, disabled: bool = False):
-        self.__queue = queue
+    def __init__(self, cog: MusicCog = None, interaction: Interaction = None, disabled: bool = False):
+        self.__cog = cog
         self.__interaction = interaction
 
         super().__init__(emoji='💬', label='Очередь', style=discord.ButtonStyle.gray, disabled=disabled)
@@ -219,12 +231,13 @@ class MusicControlButtonQueue(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
 
-        await interaction.followup.send(embed=QueueEmbed(self.__queue, self.__interaction.guild_id))
+        if MusicCog.is_user_with_bot(self.__cog.bot, self.__interaction):
+            await interaction.followup.send(embed=QueueEmbed(self.__cog.queue, self.__interaction.guild_id))
 
 
 class MusicControlButtonDisconnect(discord.ui.Button):
-    def __init__(self, bot: Bot = None, interaction: Interaction = None, disabled: bool = False):
-        self.__bot = bot
+    def __init__(self, cog: MusicCog = None, interaction: Interaction = None, disabled: bool = False):
+        self.__cog = cog
         self.__interaction = interaction
 
         super().__init__(label='Отключить', style=discord.ButtonStyle.danger, disabled=disabled)
@@ -232,12 +245,13 @@ class MusicControlButtonDisconnect(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
 
-        await MusicCog.safe_disconnect(self.__bot, self.__interaction.guild_id)
+        if MusicCog.is_user_with_bot(self.__cog.bot, self.__interaction):
+            await MusicCog.safe_disconnect(self.__cog.bot, self.__interaction.guild_id)
 
 
 class MusicControlButtonStub(discord.ui.Button):
     def __init__(self):
-        super().__init__(label='\u200b', style=discord.ButtonStyle.gray)
+        super().__init__(label='\u200b', style=discord.ButtonStyle.gray, disabled=True)
 
 
 class SearchEmbed(Embed):
@@ -268,9 +282,8 @@ class QueueEmbed(Embed):
         if queue[guild_id][1:]:
             for i, data in enumerate(queue[guild_id][1:], 1):
                 self.add_field(
-                    name='\u200b',
-                    value='**{}.** [{}]({}) ({})'.format(
-                        i,
+                    name='**{}.** {}'.format(i, data['source']['channel']),
+                    value='[{}]({}) ({})'.format(
                         data['source']['title'],
                         data['source']['original_url'],
                         MusicCog.get_formatted_duration(data['source']['duration'])
@@ -289,13 +302,13 @@ class QueueEmbed(Embed):
 
 
 class TrackEmbed(Embed):
-    def __init__(self, user: User, yt_entry: dict):
+    def __init__(self, user: Member, yt_entry: dict):
         super().__init__(title=yt_entry['title'], url=yt_entry['original_url'])
 
         self.add_field(name='Запрошено пользователем :', value=f'`{user}`', inline=True)
         self.add_field(
             name='Длительность :',
-            value=MusicCog.get_formatted_duration(yt_entry['duration']),
+            value='`{}`'.format(MusicCog.get_formatted_duration(yt_entry['duration'])),
             inline=True
         )
         self.set_footer(
@@ -305,7 +318,7 @@ class TrackEmbed(Embed):
 
 
 class PlayNowEmbed(TrackEmbed):
-    def __init__(self, user: User, yt_entry: dict):
+    def __init__(self, user: Member, yt_entry: dict):
         super().__init__(user, yt_entry)
 
         self.colour = 15548997
@@ -314,7 +327,7 @@ class PlayNowEmbed(TrackEmbed):
 
 
 class PlayQueueEmbed(TrackEmbed):
-    def __init__(self, user: User, yt_entry: dict):
+    def __init__(self, user: Member, yt_entry: dict):
         super().__init__(user, yt_entry)
 
         self.set_author(name='Трек добавлен в очередь')
