@@ -45,7 +45,7 @@ class MusicCog(commands.Cog):
         if first_track:
             await self.safe_connect(self.bot, self.queue[guild_id][0]['interaction'])
         else:
-            await self.queue[guild_id][0]['message'].edit(view=MusicControlViewDisabled())
+            await self.queue[guild_id][0]['message'].edit(view=MusicControlView(enabled=False))
             self.queue[guild_id].pop(0)
             if self.is_queue_empty(guild_id):
                 await self.safe_disconnect(self.bot, guild_id)
@@ -112,7 +112,7 @@ class MusicCog(commands.Cog):
     async def on_voice_state_update(self, user: User, before: VoiceState, after: VoiceState) -> None:
         if user == self.bot.user and after.channel is None:
             self.bot.get_guild(before.channel.guild.id).voice_client.cleanup()
-            await self.queue[before.channel.guild.id][0]['message'].edit(view=MusicControlViewDisabled())
+            await self.queue[before.channel.guild.id][0]['message'].edit(view=MusicControlView(enabled=False))
             self.queue[before.channel.guild.id] = []
 
     @discord.app_commands.command(name='play', description='Запустить музыку с YouTube')
@@ -182,13 +182,19 @@ class MusicSelectDisabled(Select):
 
 
 class MusicControlView(discord.ui.View):
-    def __init__(self, cog: MusicCog, interaction: Interaction):
+    def __init__(self, cog: MusicCog = None, interaction: Interaction = None, enabled: bool = True):
         super().__init__(timeout=None)
 
-        self.add_item(MusicControlButtonNext(cog.bot, interaction))
-        self.add_item(MusicControlButtonQueue(cog.queue, interaction))
-        self.add_item(MusicControlButtonStub())
-        self.add_item(MusicControlButtonDisconnect(cog.bot, interaction))
+        if enabled:
+            self.add_item(MusicControlButtonNext(cog.bot, interaction))
+            self.add_item(MusicControlButtonQueue(cog.queue, interaction))
+            self.add_item(MusicControlButtonStub())
+            self.add_item(MusicControlButtonDisconnect(cog.bot, interaction))
+        else:
+            self.add_item(MusicControlButtonNextDisabled())
+            self.add_item(MusicControlButtonQueueDisabled())
+            self.add_item(MusicControlButtonStub())
+            self.add_item(MusicControlButtonDisconnectDisabled())
 
 
 class MusicControlButtonNext(discord.ui.Button):
@@ -233,16 +239,6 @@ class MusicControlButtonDisconnect(discord.ui.Button):
 class MusicControlButtonStub(discord.ui.Button):
     def __init__(self):
         super().__init__(label='\u200b', style=discord.ButtonStyle.gray)
-
-
-class MusicControlViewDisabled(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-        self.add_item(MusicControlButtonNextDisabled())
-        self.add_item(MusicControlButtonQueueDisabled())
-        self.add_item(MusicControlButtonStub())
-        self.add_item(MusicControlButtonDisconnectDisabled())
 
 
 class MusicControlButtonNextDisabled(discord.ui.Button):
