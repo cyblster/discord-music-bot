@@ -4,7 +4,7 @@ import validators
 
 from discord import Guild, Member, VoiceState, Interaction, WebhookMessage, Embed, FFmpegPCMAudio
 from discord.ext import commands
-from discord.ui import View, Select
+from discord.ui import View, Select, Button
 from yt_dlp import YoutubeDL
 from time import strftime, gmtime
 from typing import Optional
@@ -213,7 +213,7 @@ class MusicSelectDisabled(Select):
         super().__init__(options=[discord.SelectOption(label='')], disabled=True)
 
 
-class MusicControlView(discord.ui.View):
+class MusicControlView(View):
     def __init__(self, cog: MusicCog = None, interaction: Interaction = None, enabled: bool = True):
         super().__init__(timeout=None)
 
@@ -229,7 +229,7 @@ class MusicControlView(discord.ui.View):
             self.add_item(MusicControlButtonDisconnect(disabled=True))
 
 
-class MusicControlButtonNext(discord.ui.Button):
+class MusicControlButtonNext(Button):
     def __init__(self, cog: MusicCog = None, interaction: Interaction = None, disabled: bool = False):
         self.__cog = cog
         self.__interaction = interaction
@@ -243,7 +243,7 @@ class MusicControlButtonNext(discord.ui.Button):
             self.__cog.bot.get_guild(interaction.guild_id).voice_client.stop()
 
 
-class MusicControlButtonQueue(discord.ui.Button):
+class MusicControlButtonQueue(Button):
     def __init__(self, cog: MusicCog = None, interaction: Interaction = None, disabled: bool = False):
         self.__cog = cog
         self.__interaction = interaction
@@ -257,7 +257,7 @@ class MusicControlButtonQueue(discord.ui.Button):
             await interaction.followup.send(embed=QueueEmbed(self.__cog.queue, self.__interaction.guild_id))
 
 
-class MusicControlButtonDisconnect(discord.ui.Button):
+class MusicControlButtonDisconnect(Button):
     def __init__(self, cog: MusicCog = None, interaction: Interaction = None, disabled: bool = False):
         self.__cog = cog
         self.__interaction = interaction
@@ -271,7 +271,7 @@ class MusicControlButtonDisconnect(discord.ui.Button):
             await MusicCog.safe_disconnect(self.__cog.bot, self.__interaction.guild_id)
 
 
-class MusicControlButtonStub(discord.ui.Button):
+class MusicControlButtonStub(Button):
     def __init__(self):
         super().__init__(label='\u200b', style=discord.ButtonStyle.gray, disabled=True)
 
