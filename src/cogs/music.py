@@ -117,7 +117,7 @@ class MusicCog(commands.Cog):
 
     @discord.app_commands.command(name='play', description='Запустить музыку с YouTube')
     @discord.app_commands.describe(search='Введите строку для поиска или URL')
-    async def command_play(self, interaction: Interaction, search: str):
+    async def command_play(self, interaction: Interaction, search: str) -> None:
         await interaction.response.defer()
 
         with YoutubeDL(self.YDL_OPTIONS) as ydl:
@@ -224,7 +224,7 @@ class MusicControlButtonDisconnect(discord.ui.Button):
 
         super().__init__(label='Отключить', style=discord.ButtonStyle.danger)
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
 
         await MusicCog.safe_disconnect(self.__bot, self.__interaction.guild_id)

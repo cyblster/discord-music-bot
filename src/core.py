@@ -16,7 +16,7 @@ class Bot(commands.Bot):
 
         self.run(token)
 
-    async def on_ready(self):
+    async def on_ready(self) -> None:
         await self.wait_until_ready()
 
         await self.add_cog(MusicCog(self))
