@@ -1,2 +1,1 @@
 from .music import MusicCog
-
