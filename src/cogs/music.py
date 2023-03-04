@@ -35,9 +35,6 @@ class MusicCog(commands.Cog):
 
         super().__init__()
 
-    def is_queue_empty(self, guild_id: int) -> bool:
-        return False if self.queue[guild_id] else True
-
     def is_first_track(self, guild_id: int) -> bool:
         return True if len(self.queue[guild_id]) == 1 else False
 
@@ -47,7 +44,7 @@ class MusicCog(commands.Cog):
         else:
             await self.queue[guild_id][0]['message'].edit(view=MusicControlView(enabled=False))
             self.queue[guild_id].pop(0)
-            if self.is_queue_empty(guild_id):
+            if not self.queue[guild_id]:
                 await self.safe_disconnect(self.bot, guild_id)
         if self.queue[guild_id]:
             source = FFmpegPCMAudio(
@@ -113,7 +110,8 @@ class MusicCog(commands.Cog):
         if user == self.bot.user and after.channel is None:
             if self.bot.get_guild(before.channel.guild.id).voice_client:
                 self.bot.get_guild(before.channel.guild.id).voice_client.cleanup()
-            await self.queue[before.channel.guild.id][0]['message'].edit(view=MusicControlView(enabled=False))
+            if self.queue[before.channel.guild.id]:
+                await self.queue[before.channel.guild.id][0]['message'].edit(view=MusicControlView(enabled=False))
             self.queue[before.channel.guild.id] = []
 
     @discord.app_commands.command(name='play', description='Запустить музыку с YouTube')
