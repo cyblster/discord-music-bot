@@ -41,7 +41,7 @@ class MusicCog(commands.Cog):
     def is_first_track(self, guild_id: int) -> bool:
         return True if len(self.queue[guild_id]) == 1 else False
 
-    async def play_track(self, guild_id: int, first_track=False) -> None:
+    async def play_track(self, guild_id: int, first_track: bool = False) -> None:
         if first_track:
             await self.safe_connect(self.bot, self.queue[guild_id][0]['interaction'])
         else:
