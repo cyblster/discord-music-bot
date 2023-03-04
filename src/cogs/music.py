@@ -38,15 +38,25 @@ class MusicCog(commands.Cog):
     def is_first_track(self, guild_id: int) -> bool:
         return True if len(self.queue[guild_id]) == 1 else False
 
+    def is_queue_empty(self, guild_id: int) -> bool:
+        return False if self.queue[guild_id] else True
+
+    def update_queue(self, message: Optional[WebhookMessage], interaction: Interaction, source: dict) -> None:
+        self.queue[interaction.guild_id].append({
+            'message': message,
+            'interaction': interaction,
+            'source': source
+        })
+
     async def play_track(self, guild_id: int, first_track: bool = False) -> None:
         if first_track:
             await self.safe_connect(self.bot, self.queue[guild_id][0]['interaction'])
         else:
             await self.queue[guild_id][0]['message'].edit(view=MusicControlView(enabled=False))
             self.queue[guild_id].pop(0)
-            if not self.queue[guild_id]:
+            if self.is_queue_empty(guild_id):
                 await self.safe_disconnect(self.bot, guild_id)
-        if self.queue[guild_id]:
+        if not self.is_queue_empty(guild_id):
             source = FFmpegPCMAudio(
                 self.queue[guild_id][0]['source']['url'],
                 **self.FFMPEG_OPTIONS,
@@ -66,13 +76,6 @@ class MusicCog(commands.Cog):
                 ),
                 view=MusicControlView(self, self.queue[guild_id][0]['interaction'])
             )
-
-    def update_queue(self, message: Optional[WebhookMessage], interaction: Interaction, source: dict) -> None:
-        self.queue[interaction.guild_id].append({
-            'message': message,
-            'interaction': interaction,
-            'source': source
-        })
 
     @staticmethod
     def is_user_connected(interaction: Interaction) -> bool:
@@ -99,10 +102,19 @@ class MusicCog(commands.Cog):
             await bot.get_guild(guild_id).voice_client.disconnect(force=True)
 
     @staticmethod
-    def get_formatted_duration(duration: str) -> str:
+    def get_formatted_duration(duration: Optional[str]) -> str:
+        if duration is None:
+            return 'Неизвестно'
         if int(duration) >= 3600:
             return strftime('%H:%M:%S', gmtime(int(duration)))
         return strftime('%M:%S', gmtime(int(duration)))
+
+    @staticmethod
+    def get_formatted_option(label: str) -> str:
+        if len(label) > 90:
+            return label[:90]
+        else:
+            return label
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: Guild) -> None:
@@ -130,6 +142,8 @@ class MusicCog(commands.Cog):
     @discord.app_commands.describe(search='Введите строку для поиска или URL')
     async def command_play(self, interaction: Interaction, search: str) -> None:
         if not self.is_user_connected(interaction):
+            return
+        if not self.is_queue_empty(interaction.guild_id) and not self.is_user_with_bot(self.bot, interaction):
             return
 
         await interaction.response.defer()
@@ -173,7 +187,10 @@ class MusicSelect(Select):
         self.__entries = entries
 
         super().__init__(placeholder='Выберите нужное', options=[
-            discord.SelectOption(label='{}. {}'.format(i + 1, entry['title']), value=str(i))
+            discord.SelectOption(label='{}. {}'.format(
+                i + 1,
+                MusicCog.get_formatted_option(entry['title'])), value=str(i)
+            )
             for i, entry in enumerate(self.__entries)
         ])
 
@@ -270,7 +287,7 @@ class SearchEmbed(Embed):
                     i,
                     entry['title'],
                     entry['original_url'],
-                    MusicCog.get_formatted_duration(entry['duration'])
+                    MusicCog.get_formatted_duration(entry.get('duration'))
                 ),
                 inline=False
             )
@@ -291,7 +308,7 @@ class QueueEmbed(Embed):
                     value='[{}]({}) ({})'.format(
                         data['source']['title'],
                         data['source']['original_url'],
-                        MusicCog.get_formatted_duration(data['source']['duration'])
+                        MusicCog.get_formatted_duration(data['source'].get('duration'))
                     ),
                     inline=False
                 )
@@ -313,7 +330,7 @@ class TrackEmbed(Embed):
         self.add_field(name='Запрошено пользователем :', value=f'`{user}`', inline=True)
         self.add_field(
             name='Длительность :',
-            value='`{}`'.format(MusicCog.get_formatted_duration(yt_entry['duration'])),
+            value='`{}`'.format(MusicCog.get_formatted_duration(yt_entry.get('duration'))),
             inline=True
         )
         self.set_footer(
