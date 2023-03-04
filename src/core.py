@@ -2,8 +2,7 @@ import discord
 from discord import Intents
 from discord.ext import commands
 
-from cogs import *
-from config import BaseConfig
+from src.cogs import *
 
 
 class Bot(commands.Bot):
@@ -22,7 +21,3 @@ class Bot(commands.Bot):
         await self.add_cog(MusicCog(self))
 
         await self.tree.sync()
-
-
-if __name__ == '__main__':
-    Bot(BaseConfig.TOKEN)

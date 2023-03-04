@@ -9,7 +9,7 @@ from yt_dlp import YoutubeDL
 from time import strftime, gmtime
 from typing import Optional
 
-from src.core import Bot
+
 from src.config import BaseConfig
 
 
@@ -26,7 +26,7 @@ class MusicCog(commands.Cog):
     }
     YOUTUBE_LOGO_URL = 'https://cdn1.iconfinder.com/data/icons/logotypes/32/youtube-512.png'
 
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
         self.queue = {}
@@ -82,7 +82,7 @@ class MusicCog(commands.Cog):
         return True if interaction.user.voice else False
 
     @staticmethod
-    def is_user_with_bot(bot: Bot, interaction: Interaction) -> bool:
+    def is_user_with_bot(bot: commands.Bot, interaction: Interaction) -> bool:
         if not MusicCog.is_user_connected(interaction):
             return False
         if interaction.user.voice.channel != bot.get_channel(
@@ -92,12 +92,12 @@ class MusicCog(commands.Cog):
         return True
 
     @staticmethod
-    async def safe_connect(bot: Bot, interaction: Interaction) -> None:
+    async def safe_connect(bot: commands.Bot, interaction: Interaction) -> None:
         if not bot.get_guild(interaction.guild_id).voice_client:
             await interaction.user.voice.channel.connect()
 
     @staticmethod
-    async def safe_disconnect(bot: Bot, guild_id: int) -> None:
+    async def safe_disconnect(bot: commands.Bot, guild_id: int) -> None:
         if bot.get_guild(guild_id).voice_client:
             await bot.get_guild(guild_id).voice_client.disconnect(force=True)
 
