@@ -114,12 +114,17 @@ class MusicCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, user: Member, before: VoiceState, after: VoiceState) -> None:
-        if user == self.bot.user and after.channel is None:
-            if self.bot.get_guild(before.channel.guild.id).voice_client:
-                self.bot.get_guild(before.channel.guild.id).voice_client.cleanup()
-            if self.queue[before.channel.guild.id]:
-                await self.queue[before.channel.guild.id][0]['message'].edit(view=MusicControlView(enabled=False))
-            self.queue[before.channel.guild.id] = []
+        if user == self.bot.user:
+            if not after.channel:
+                if self.bot.get_guild(before.channel.guild.id).voice_client:
+                    self.bot.get_guild(before.channel.guild.id).voice_client.cleanup()
+                if self.queue[before.channel.guild.id]:
+                    await self.queue[before.channel.guild.id][0]['message'].edit(view=MusicControlView(enabled=False))
+                self.queue[before.channel.guild.id] = []
+        elif before.channel and self.bot.get_guild(before.channel.guild.id).voice_client:
+            if before.channel == self.bot.get_guild(before.channel.guild.id).voice_client.channel:
+                if len(before.channel.members) == 1 and before.channel.members[0] == self.bot.user:
+                    await self.safe_disconnect(self.bot, before.channel.guild.id)
 
     @discord.app_commands.command(name='play', description='Запустить музыку с YouTube')
     @discord.app_commands.describe(search='Введите строку для поиска или URL')
