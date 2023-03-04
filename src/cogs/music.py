@@ -111,7 +111,8 @@ class MusicCog(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, user: User, before: VoiceState, after: VoiceState) -> None:
         if user == self.bot.user and after.channel is None:
-            self.bot.get_guild(before.channel.guild.id).voice_client.cleanup()
+            if self.bot.get_guild(before.channel.guild.id).voice_client:
+                self.bot.get_guild(before.channel.guild.id).voice_client.cleanup()
             await self.queue[before.channel.guild.id][0]['message'].edit(view=MusicControlView(enabled=False))
             self.queue[before.channel.guild.id] = []
 
@@ -191,44 +192,44 @@ class MusicControlView(discord.ui.View):
             self.add_item(MusicControlButtonStub())
             self.add_item(MusicControlButtonDisconnect(cog.bot, interaction))
         else:
-            self.add_item(MusicControlButtonNextDisabled())
-            self.add_item(MusicControlButtonQueueDisabled())
+            self.add_item(MusicControlButtonNext(disabled=True))
+            self.add_item(MusicControlButtonQueue(disabled=True))
             self.add_item(MusicControlButtonStub())
-            self.add_item(MusicControlButtonDisconnectDisabled())
+            self.add_item(MusicControlButtonDisconnect(disabled=True))
 
 
 class MusicControlButtonNext(discord.ui.Button):
-    def __init__(self, bot: Bot, interaction: Interaction):
+    def __init__(self, bot: Bot = None, interaction: Interaction = None, disabled: bool = False):
         self.__bot = bot
         self.__interaction = interaction
 
-        super().__init__(emoji='⏭', label='Пропустить', style=discord.ButtonStyle.gray)
+        super().__init__(emoji='⏭', label='Пропустить', style=discord.ButtonStyle.gray, disabled=disabled)
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
 
         self.__bot.get_guild(interaction.guild_id).voice_client.stop()
 
 
 class MusicControlButtonQueue(discord.ui.Button):
-    def __init__(self, queue: dict, interaction: Interaction):
+    def __init__(self, queue: dict = None, interaction: Interaction = None, disabled: bool = False):
         self.__queue = queue
         self.__interaction = interaction
 
-        super().__init__(emoji='💬', label='Очередь', style=discord.ButtonStyle.gray)
+        super().__init__(emoji='💬', label='Очередь', style=discord.ButtonStyle.gray, disabled=disabled)
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
 
         await interaction.followup.send(embed=QueueEmbed(self.__queue, self.__interaction.guild_id))
 
 
 class MusicControlButtonDisconnect(discord.ui.Button):
-    def __init__(self, bot: Bot, interaction: Interaction):
+    def __init__(self, bot: Bot = None, interaction: Interaction = None, disabled: bool = False):
         self.__bot = bot
         self.__interaction = interaction
 
-        super().__init__(label='Отключить', style=discord.ButtonStyle.danger)
+        super().__init__(label='Отключить', style=discord.ButtonStyle.danger, disabled=disabled)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
@@ -239,21 +240,6 @@ class MusicControlButtonDisconnect(discord.ui.Button):
 class MusicControlButtonStub(discord.ui.Button):
     def __init__(self):
         super().__init__(label='\u200b', style=discord.ButtonStyle.gray)
-
-
-class MusicControlButtonNextDisabled(discord.ui.Button):
-    def __init__(self):
-        super().__init__(emoji='⏭', label='Пропустить', style=discord.ButtonStyle.gray, disabled=True)
-
-
-class MusicControlButtonQueueDisabled(discord.ui.Button):
-    def __init__(self):
-        super().__init__(emoji='💬', label='Очередь', style=discord.ButtonStyle.gray, disabled=True)
-
-
-class MusicControlButtonDisconnectDisabled(discord.ui.Button):
-    def __init__(self):
-        super().__init__(label='Отключить', style=discord.ButtonStyle.danger, disabled=True)
 
 
 class SearchEmbed(Embed):
