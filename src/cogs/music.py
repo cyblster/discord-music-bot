@@ -198,12 +198,12 @@ class MusicSelect(Select):
         await interaction.response.defer()
         await interaction.edit_original_response(view=MusicSelectView(timeout=None, enabled=False))
 
-        if self.__cog.is_user_connected(interaction):
+        if MusicCog.is_user_connected(interaction):
             self.__cog.update_queue(None, interaction, self.__entries[int(self.values[0])])
             if self.__cog.is_first_track(interaction.guild_id):
                 await self.__cog.play_track(interaction.guild_id, first_track=True)
             else:
-                if self.__cog.is_user_with_bot(self.__cog.bot, interaction):
+                if MusicCog.is_user_with_bot(self.__cog.bot, interaction):
                     await interaction.followup.send(embed=PlayQueueEmbed(
                         interaction.user, self.__entries[int(self.values[0])]))
 
