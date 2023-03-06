@@ -77,6 +77,13 @@ class MusicCog(commands.Cog):
             guild_id = interaction.guild_id
             user = interaction.user
             text_channel = interaction.channel
+            self.queue[guild_id][0]['message'] = await self.bot.get_channel(text_channel.id).fetch_message(
+                (await interaction.followup.send(
+                    embed=PlayNowEmbed(self.queue[text_channel.guild.id][0]['source'],
+                                       user, self.YOUTUBE_LOGO_URL),
+                    view=MusicControlView(self, guild_id)
+                )).id
+            )
             await self.safe_connect(interaction)
         else:
             guild_id = user.guild.id
@@ -84,6 +91,12 @@ class MusicCog(commands.Cog):
             self.queue[guild_id].pop(0)
             if self.is_queue_empty(guild_id):
                 await self.safe_disconnect(guild_id)
+            else:
+                self.queue[guild_id][0]['message'] = await self.bot.get_channel(text_channel.id).send(
+                    embed=PlayNowEmbed(self.queue[text_channel.guild.id][0]['source'],
+                                       user, self.YOUTUBE_LOGO_URL),
+                    view=MusicControlView(self, guild_id)
+                )
         if not self.is_queue_empty(guild_id):
             source = FFmpegPCMAudio(
                 self.queue[guild_id][0]['source']['url'],
@@ -96,10 +109,6 @@ class MusicCog(commands.Cog):
                     self.play_track(None, user, text_channel),
                     self.bot.loop
                 )
-            )
-            self.queue[guild_id][0]['message'] = await self.bot.get_channel(text_channel.id).send(
-                embed=PlayNowEmbed(self.queue[text_channel.guild.id][0]['source'], user, self.YOUTUBE_LOGO_URL),
-                view=MusicControlView(self)
             )
 
     @staticmethod
@@ -169,17 +178,16 @@ class MusicCog(commands.Cog):
             else:
                 entries = ydl.extract_info(f'ytsearch5:{search}', download=False)['entries']
                 await interaction.followup.send(
-                    embed=SearchEmbed(entries),
+                    embed=SearchEmbed(self, entries),
                     view=MusicSelectView(self, interaction, entries)
                 )
 
 
 class MusicSelectView(View):
-    def __init__(self, cog: MusicCog, interaction: Interaction,
-                 entries: dict = None, timeout: float = 30.0):
+    def __init__(self, cog: MusicCog, interaction: Interaction, entries: dict = None):
         self.__interaction = interaction
 
-        super().__init__(timeout=timeout)
+        super().__init__(timeout=60)
 
         self.add_item(MusicSelect(cog, entries))
 
@@ -225,10 +233,11 @@ class MusicSelectViewDisabled(View):
 
 
 class MusicControlView(View):
-    def __init__(self, cog: MusicCog):
+    def __init__(self, cog: MusicCog, guild_id: int):
         self.__cog = cog
+        self.__guild_id = guild_id
 
-        super().__init__(timeout=None)
+        super().__init__(timeout=600)
 
     @discord.ui.button(emoji='⏭', label='Пропустить', style=discord.ButtonStyle.gray)
     async def btn_skip(self, interaction: Interaction, button: Button):
@@ -258,6 +267,14 @@ class MusicControlView(View):
         if self.__cog.is_user_with_bot(interaction):
             await self.__cog.safe_disconnect(interaction.guild_id)
 
+    async def on_timeout(self) -> None:
+        if self.__cog.is_queue_empty(self.__guild_id):
+            return
+
+        self.__cog.queue[self.__guild_id][0]['message'] = await self.__cog.queue[self.__guild_id][0]['message'].edit(
+            view=MusicControlView(self.__cog, self.__guild_id)
+        )
+
 
 class MusicControlViewDisabled(View):
     def __init__(self):
@@ -281,7 +298,9 @@ class MusicControlViewDisabled(View):
 
 
 class SearchEmbed(Embed):
-    def __init__(self, yt_entries: dict):
+    def __init__(self, cog: MusicCog, yt_entries: dict):
+        self.__cog = cog
+
         super().__init__(title='Результаты поиска :')
 
         for i, entry in enumerate(yt_entries, 1):
@@ -291,13 +310,13 @@ class SearchEmbed(Embed):
                     i,
                     entry['title'],
                     entry['original_url'],
-                    entry['duration']
+                    self.__cog.get_formatted_duration(entry.get('duration'))
                 ),
                 inline=False
             )
         self.set_footer(
             text='YouTube',
-            icon_url=MusicCog.YOUTUBE_LOGO_URL
+            icon_url=self.__cog.YOUTUBE_LOGO_URL
         )
 
 
