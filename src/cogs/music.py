@@ -2,7 +2,7 @@ import asyncio
 import discord
 import validators
 
-from discord import Guild, Member, Interaction, Embed, VoiceState, FFmpegPCMAudio
+from discord import Guild, Member, TextChannel, Interaction, Embed, VoiceState, FFmpegPCMAudio
 from discord.ext import commands
 from discord.ui import View, Select, Button
 from yt_dlp import YoutubeDL
@@ -34,9 +34,9 @@ class MusicCog(commands.Cog):
 
         super().__init__()
 
-    async def safe_connect(self, interaction: Interaction) -> None:
-        if not self.bot.get_guild(interaction.guild_id).voice_client:
-            await interaction.user.voice.channel.connect()
+    async def safe_connect(self, user: Member) -> None:
+        if not self.bot.get_guild(user.voice.channel.guild.id).voice_client:
+            await self.bot.get_channel(user.voice.channel.id).connect()
 
     async def safe_disconnect(self, guild_id: int) -> None:
         if self.bot.get_guild(guild_id).voice_client:
@@ -71,31 +71,29 @@ class MusicCog(commands.Cog):
             }
         })
 
-    async def play_track(self, interaction: Interaction, first_track: bool = False) -> None:
+    async def play_track(self, user: Member, text_channel: TextChannel, first_track: bool = False) -> None:
         if first_track:
-            await self.safe_connect(interaction)
+            await self.safe_connect(user)
         else:
-            await self.queue[interaction.guild_id][0]['message'].edit(view=MusicControlViewDisabled())
-            self.queue[interaction.guild_id].pop(0)
-            if self.is_queue_empty(interaction.guild_id):
-                await self.safe_disconnect(interaction.guild_id)
-        if not self.is_queue_empty(interaction.guild_id):
+            await self.queue[user.guild.id][0]['message'].edit(view=MusicControlViewDisabled())
+            self.queue[user.guild.id].pop(0)
+            if self.is_queue_empty(user.guild.id):
+                await self.safe_disconnect(user.guild.id)
+        if not self.is_queue_empty(user.guild.id):
             source = FFmpegPCMAudio(
-                self.queue[interaction.guild_id][0]['source']['url'],
+                self.queue[user.guild.id][0]['source']['url'],
                 **self.FFMPEG_OPTIONS,
                 executable=self.FFMPEG_PATH
             )
-            self.bot.get_guild(interaction.guild_id).voice_client.play(
+            self.bot.get_guild(user.guild.id).voice_client.play(
                 source,
                 after=lambda _: asyncio.run_coroutine_threadsafe(
-                    self.play_track(interaction, first_track=False),
+                    self.play_track(user, text_channel, first_track=False),
                     self.bot.loop
                 )
             )
-            self.queue[interaction.guild_id][0]['message'] = await interaction.followup.send(
-                embed=PlayNowEmbed(self.queue[interaction.guild_id][0]['source'],
-                                   interaction.user,
-                                   self.YOUTUBE_LOGO_URL),
+            self.queue[user.guild.id][0]['message'] = await self.bot.get_channel(text_channel.id).send(
+                embed=PlayNowEmbed(self.queue[text_channel.guild.id][0]['source'], user, self.YOUTUBE_LOGO_URL),
                 view=MusicControlView(self)
             )
 
@@ -150,13 +148,14 @@ class MusicCog(commands.Cog):
         if not self.is_queue_empty(interaction.guild_id) and not self.is_user_with_bot(interaction):
             return
         await interaction.response.defer()
+        await interaction.followup.delete_message()
 
         with YoutubeDL(self.YDL_OPTIONS) as ydl:
             if validators.url(search):
                 entry = ydl.extract_info(search, download=False)
                 self.update_queue(interaction.guild_id, entry)
                 if self.is_first_track(interaction.guild_id):
-                    await self.play_track(interaction, first_track=True)
+                    await self.play_track(interaction.user, interaction.channel, first_track=True)
                 else:
                     await interaction.followup.send(embed=PlayQueueEmbed(
                         self.queue[interaction.guild_id][-1]['source'],
@@ -202,9 +201,9 @@ class MusicSelect(Select):
         await interaction.response.edit_message(view=MusicSelectViewDisabled())
 
         if self.__cog.is_user_connected(interaction):
-            self.__cog.update_queue(interaction.guild_id, None, self.__entries[int(self.values[0])])
+            self.__cog.update_queue(interaction.guild_id, self.__entries[int(self.values[0])])
             if self.__cog.is_first_track(interaction.guild_id):
-                await self.__cog.play_track(interaction, first_track=True)
+                await self.__cog.play_track(interaction.user, interaction.channel, first_track=True)
             else:
                 if self.__cog.is_user_with_bot(interaction):
                     await interaction.followup.send(embed=PlayQueueEmbed(
