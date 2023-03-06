@@ -2,12 +2,11 @@ import asyncio
 import discord
 import validators
 
-from discord import Guild, Member, Message, VoiceState, Interaction, Embed, FFmpegPCMAudio
+from discord import Guild, Member, Interaction, Embed, VoiceState, FFmpegPCMAudio
 from discord.ext import commands
 from discord.ui import View, Select, Button
 from yt_dlp import YoutubeDL
 from time import strftime, gmtime
-from typing import Optional
 
 
 from src.config import BaseConfig
@@ -58,9 +57,9 @@ class MusicCog(commands.Cog):
     def is_queue_empty(self, guild_id: int) -> bool:
         return False if self.queue[guild_id] else True
 
-    def update_queue(self, guild_id: int, message: Optional[Message], yt_entry: dict) -> None:
+    def update_queue(self, guild_id: int, yt_entry: dict) -> None:
         self.queue[guild_id].append({
-            'message': message,
+            'message': None,
             'source': {
                 'url': yt_entry['url'],
                 'title': yt_entry['title'],
@@ -107,7 +106,7 @@ class MusicCog(commands.Cog):
         return False
 
     @staticmethod
-    def get_formatted_duration(duration: Optional[str]) -> str:
+    def get_formatted_duration(duration: str = None) -> str:
         if duration is None:
             return 'Неизвестно'
         if int(duration) >= 3600:
@@ -155,7 +154,7 @@ class MusicCog(commands.Cog):
         with YoutubeDL(self.YDL_OPTIONS) as ydl:
             if validators.url(search):
                 entry = ydl.extract_info(search, download=False)
-                self.update_queue(interaction.guild_id, None, entry)
+                self.update_queue(interaction.guild_id, entry)
                 if self.is_first_track(interaction.guild_id):
                     await self.play_track(interaction, first_track=True)
                 else:
@@ -174,7 +173,7 @@ class MusicCog(commands.Cog):
 
 class MusicSelectView(View):
     def __init__(self, cog: MusicCog, interaction: Interaction,
-                 entries: dict = None, timeout: Optional[float] = 30.0):
+                 entries: dict = None, timeout: float = 30.0):
         self.__interaction = interaction
 
         super().__init__(timeout=timeout)
