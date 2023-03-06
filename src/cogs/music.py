@@ -148,7 +148,7 @@ class MusicCog(commands.Cog):
         if not self.is_queue_empty(interaction.guild_id) and not self.is_user_with_bot(interaction):
             return
         await interaction.response.defer()
-        message = await interaction.followup.send_message('\u200b')
+        message = await interaction.followup.send('\u200b')
         await interaction.followup.delete_message(message.id)
 
         with YoutubeDL(self.YDL_OPTIONS) as ydl:
