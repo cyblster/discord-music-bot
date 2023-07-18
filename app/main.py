@@ -21,3 +21,11 @@ class Bot(commands.Bot):
         await self.add_cog(MusicCog(self))
 
         await self.tree.sync()
+
+
+if __name__ == '__main__':
+    from configs.environment import get_environment_variables
+
+    env = get_environment_variables()
+
+    Bot(env.TOKEN)
