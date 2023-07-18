@@ -2,7 +2,7 @@ import discord
 from discord import Intents
 from discord.ext import commands
 
-from src.cogs import *
+from app.cogs.music import MusicCog
 
 
 class Bot(commands.Bot):

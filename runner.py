@@ -1,5 +1,5 @@
-from src.core import Bot
-from src.config import BaseConfig
+from app.main import Bot
+from app.config import BaseConfig
 
 
 if __name__ == '__main__':
