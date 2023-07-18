@@ -50,9 +50,7 @@ class MusicCog(commands.Cog):
         if not self.is_user_connected(interaction):
             return False
 
-        user_channel = interaction.user.voice.channel
-        bot_channel = self.bot.get_channel(interaction.user.voice.channel.id)
-        return user_channel == bot_channel
+        return self.bot.get_channel(interaction.user.voice.channel.id) is not None
 
     def is_first_track(self, guild_id: int) -> bool:
         return len(self.queue[guild_id]) == 1
