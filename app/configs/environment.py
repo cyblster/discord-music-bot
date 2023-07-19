@@ -1,7 +1,8 @@
 from functools import lru_cache
 import os
+import pathlib
 
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 @lru_cache
@@ -14,10 +15,10 @@ class EnvironmentSettings(BaseSettings):
     TOKEN: str
     FFMPEG_PATH: str
 
-    DEBUG_MODE: bool
+    DEBUG: bool
 
     class Config:
-        env_file = get_env_filename()
+        env_file = f'{pathlib.Path(__file__).parent.parent.parent}/{get_env_filename()}'
         env_file_encoding = "utf-8"
 
 

@@ -8,8 +8,8 @@ from app.cogs.music import MusicCog
 class Bot(commands.Bot):
     def __init__(self, token: str):
         super().__init__(
-            command_prefix=commands.when_mentioned_or(),
-            activity=discord.Game(name="/play"),
+            command_prefix='/',
+            activity=discord.Activity(type=discord.ActivityType.listening, name='/play'),
             intents=Intents.all()
         )
 

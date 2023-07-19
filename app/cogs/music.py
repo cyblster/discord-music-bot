@@ -6,7 +6,7 @@ from discord import Guild, Member, TextChannel, Interaction, Embed, VoiceState, 
 from discord.ext import commands
 from discord.ui import View, Select, Button
 from yt_dlp import YoutubeDL
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 from app.configs.environment import get_environment_variables
@@ -42,73 +42,65 @@ class MusicCog(commands.Cog):
             await interaction.user.voice.channel.connect()
 
     async def disconnect(self, guild_id: int) -> None:
-        voice_client = self.bot.get_guild(guild_id).voice_client
-        if voice_client:
-            await voice_client.disconnect(force=True)
+        if self.bot.get_guild(guild_id).voice_client:
+            await self.bot.get_guild(guild_id).voice_client.disconnect(force=True)
+
+    def is_bot_connected(self, guild_id: int) -> bool:
+        return self.bot.get_guild(guild_id).voice_client is not None
 
     def is_user_with_bot(self, interaction: Interaction) -> bool:
         if not self.is_user_connected(interaction):
             return False
 
-        return self.bot.get_channel(interaction.user.voice.channel.id) is not None
+        user_channel = interaction.user.voice.channel
+        return user_channel == self.bot.get_channel(user_channel.id).guild.voice_client.channel
 
     def is_first_track(self, guild_id: int) -> bool:
         return len(self.queue[guild_id]) == 1
 
     def is_queue_empty(self, guild_id: int) -> bool:
-        return not len(self.queue[guild_id]) > 0
+        return len(self.queue[guild_id]) == 0
 
-    def update_queue(self, guild_id: int, yt_source: dict) -> None:
+    def update_queue(self, guild_id: int, yt_entry: dict) -> None:
         self.queue[guild_id].append({
             'message': None,
             'source': {
-                'url': yt_source['url'],
-                'title': yt_source['title'],
-                'original_url': yt_source['original_url'],
-                'channel': yt_source['channel'],
-                'channel_url': yt_source['channel_url'],
-                'thumbnail': yt_source['thumbnail'],
-                'duration': self.get_formatted_duration(yt_source['duration'])
+                'url': yt_entry['url'],
+                'title': yt_entry['title'],
+                'original_url': yt_entry['original_url'],
+                'channel': yt_entry['channel'],
+                'channel_url': yt_entry['channel_url'],
+                'thumbnail': yt_entry['thumbnail'],
+                'duration': self.get_formatted_duration(yt_entry.get('duration'))
             }
         })
 
-    async def play_track(
-        self,
-        interaction: Interaction = None,
-        user: Member = None,
-        text_channel: TextChannel = None
-    ) -> None:
+    async def play_track(self, interaction: Interaction = None,
+                         user: Member = None, text_channel: TextChannel = None) -> None:
         if interaction:
-            guild_id = interaction.guild.id
-            message = await self.bot.get_channel(interaction.channel.id).fetch_message(
+            guild_id = interaction.guild_id
+            user = interaction.user
+            text_channel = interaction.channel
+            self.queue[guild_id][0]['message'] = await self.bot.get_channel(text_channel.id).fetch_message(
                 (await interaction.followup.send(
-                    embed=PlayNowEmbed(
-                        source=self.queue[interaction.channel.guild.id][0]['source'],
-                        user=user,
-                        icon_url=self.YOUTUBE_LOGO_URL
-                    ),
+                    embed=PlayNowEmbed(self.queue[text_channel.guild.id][0]['source'],
+                                       user, self.YOUTUBE_LOGO_URL),
                     view=MusicControlView(self, guild_id)
                 )).id
             )
-            self.queue[guild_id][0]['message'] = message
             await self.connect(interaction)
         else:
             guild_id = user.guild.id
-            await self.queue[guild_id][0]['message'].edit(view=MusicSelectViewDisabled())
+            await self.queue[guild_id][0]['message'].edit(view=MusicControlViewDisabled())
             self.queue[guild_id].pop(0)
-            if self.is_queue_empty(user.guild.id):
-                await self.disconnect(user.guild.id)
+            if self.is_queue_empty(guild_id):
+                await self.disconnect(guild_id)
             else:
-                message = self.bot.get_guild(text_channel.id).send(
-                    embed=PlayNowEmbed(
-                        source=self.queue[text_channel.guild.id][0]['source'],
-                        user=user,
-                        icon_url=self.YOUTUBE_LOGO_URL
-                    ),
-                    view=MusicControlView(self, user.guild.id)
+                self.queue[guild_id][0]['message'] = await self.bot.get_channel(text_channel.id).send(
+                    embed=PlayNowEmbed(self.queue[text_channel.guild.id][0]['source'],
+                                       user, self.YOUTUBE_LOGO_URL),
+                    view=MusicControlView(self, guild_id)
                 )
-                self.queue[guild_id][0]['message'] = message
-
         if not self.is_queue_empty(guild_id):
             source = FFmpegPCMAudio(
                 self.queue[guild_id][0]['source']['url'],
@@ -123,17 +115,26 @@ class MusicCog(commands.Cog):
                 )
             )
 
-    async def skip_track(self, interaction: Interaction) -> None:
-        if self.is_user_with_bot(interaction):
-            self.bot.get_guild(interaction.guild_id).voice_client.stop()
+    def skip_track(self, interaction: Interaction) -> None:
+        self.bot.get_guild(interaction.guild_id).voice_client.stop()
 
     @staticmethod
     def is_user_connected(interaction: Interaction) -> bool:
         return interaction.user.voice is not None
 
     @staticmethod
-    def get_formatted_duration(duration: int) -> str:
-        return datetime.fromtimestamp(duration).strftime('%d:%I:%M:%S').lstrip('00:')
+    def get_formatted_duration(duration: int = None) -> str:
+        if duration is None:
+            return 'Неизвестно'
+
+        dt = datetime.utcfromtimestamp(duration)
+        if dt.day == 1:
+            if dt.hour == 0:
+                return dt.strftime('%M:%S')
+            return dt.strftime('%H:%M:%S')
+
+        dt -= timedelta(days=1)
+        return dt.strftime('%d:%H:%M:%S')
 
     @staticmethod
     def get_formatted_option(option: str) -> str:
@@ -161,17 +162,22 @@ class MusicCog(commands.Cog):
                 if len(before.channel.members) == 1 and before.channel.members[0] == self.bot.user:
                     await self.disconnect(before.channel.guild.id)
 
-    @discord.app_commands.command(name='play', description='Включить трек с YouTube')
+    @discord.app_commands.command(name='play', description='Запустить музыку с YouTube')
     @discord.app_commands.describe(search='Введите строку для поиска или URL')
     async def command_play(self, interaction: Interaction, search: str) -> None:
         if not self.is_user_connected(interaction):
+            await interaction.response.defer(ephemeral=True)
+            await interaction.followup.send('❌ Вы не подключены к голосовому каналу')
             return
         if not self.is_queue_empty(interaction.guild_id) and not self.is_user_with_bot(interaction):
+            await interaction.response.defer(ephemeral=True)
+            await interaction.followup.send('❌ Вы не подключены к голосовому каналу, в котором находится бот')
             return
-        await interaction.response.defer()
 
         with YoutubeDL(self.YDL_OPTIONS) as ydl:
             if validators.url(search):
+                await interaction.response.defer()
+
                 entry = ydl.extract_info(search, download=False)
                 self.update_queue(interaction.guild_id, entry)
                 if self.is_first_track(interaction.guild_id):
@@ -183,6 +189,8 @@ class MusicCog(commands.Cog):
                         self.YOUTUBE_LOGO_URL
                     ))
             else:
+                await interaction.response.defer(ephemeral=True)
+
                 entries = ydl.extract_info(f'ytsearch5:{search}', download=False)['entries']
                 await interaction.followup.send(
                     embed=SearchEmbed(self, entries),
@@ -191,23 +199,53 @@ class MusicCog(commands.Cog):
 
     @discord.app_commands.command(name='skip', description='Пропустить текущий трек')
     async def command_skip(self, interaction: Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+
+        if not self.is_bot_connected(interaction.guild_id):
+            await interaction.followup.send('❌ Бот не подключен к голосовому каналу')
+            return
         if not self.is_user_connected(interaction):
+            await interaction.followup.send('❌ Вы не подключены к голосовому каналу')
             return
         if not self.is_user_with_bot(interaction):
+            await interaction.followup.send('❌ Вы не подключены к голосовому каналу, в котором находится бот')
             return
-        await interaction.response.defer()
 
-        await self.skip_track(interaction)
+        self.skip_track(interaction)
+        if self.is_first_track(interaction.guild_id):
+            await interaction.followup.send('👋')
+        else:
+            await interaction.followup.send('✅ Пропускаю текущий трек')
+
+    @discord.app_commands.command(name='queue', description='Просмотреть очередь треков')
+    async def command_queue(self, interaction: Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+
+        if not self.is_bot_connected(interaction.guild_id):
+            await interaction.followup.send('❌ Бот не подключен к голосовому каналу')
+            return
+
+        await interaction.followup.send(embed=QueueEmbed(
+            self.queue,
+            interaction.guild_id
+        ), ephemeral=True)
 
     @discord.app_commands.command(name='stop', description='Отключить бота')
     async def command_stop(self, interaction: Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+
+        if not self.is_bot_connected(interaction.guild_id):
+            await interaction.followup.send('❌ Бот не подключен к голосовому каналу')
+            return
         if not self.is_user_connected(interaction):
+            await interaction.followup.send('❌ Вы не подключены к голосовому каналу')
             return
         if not self.is_user_with_bot(interaction):
+            await interaction.followup.send('❌ Вы не подключены к голосовому каналу, в котором находится бот')
             return
-        await interaction.response.defer()
 
         await self.disconnect(interaction.guild.id)
+        await interaction.followup.send('👋')
 
 
 class MusicSelectView(View):
@@ -245,7 +283,7 @@ class MusicSelect(Select):
                 await self.__cog.play_track(interaction)
             else:
                 if self.__cog.is_user_with_bot(interaction):
-                    await interaction.followup.send(embed=PlayQueueEmbed(
+                    await self.__cog.bot.get_channel(interaction.channel.id).send(embed=PlayQueueEmbed(
                         self.__cog.queue[interaction.guild_id][-1]['source'],
                         interaction.user,
                         self.__cog.YOUTUBE_LOGO_URL
@@ -271,18 +309,17 @@ class MusicControlView(View):
         await interaction.response.defer()
 
         if self.__cog.is_user_with_bot(interaction):
-            await self.__cog.skip_track(interaction)
+            self.__cog.bot.get_guild(interaction.guild_id).voice_client.stop()
 
     @discord.ui.button(emoji='💬', label='Очередь', style=discord.ButtonStyle.gray)
     async def btn_queue(self, interaction: Interaction, button: Button):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
 
         if self.__cog.is_user_with_bot(interaction):
             await interaction.followup.send(embed=QueueEmbed(
                 self.__cog.queue,
-                interaction.guild_id,
-                self.__cog.YOUTUBE_LOGO_URL
-            ))
+                interaction.guild_id
+            ), ephemeral=True)
 
     @discord.ui.button(label='\u200b', style=discord.ButtonStyle.gray, disabled=True)
     async def btn_stub(self, interaction: Interaction, button: Button):
@@ -326,19 +363,19 @@ class MusicControlViewDisabled(View):
 
 
 class SearchEmbed(Embed):
-    def __init__(self, cog: MusicCog, yt_sources: dict):
+    def __init__(self, cog: MusicCog, yt_entries: dict):
         self.__cog = cog
 
         super().__init__(title='Результаты поиска :')
 
-        for i, source in enumerate(yt_sources, 1):
+        for i, entry in enumerate(yt_entries, 1):
             self.add_field(
                 name='\u200b',
                 value='**{}.** [{}]({}) ({})'.format(
                     i,
-                    source['title'],
-                    source['original_url'],
-                    self.__cog.get_formatted_duration(source['duration'])
+                    entry['title'],
+                    entry['original_url'],
+                    self.__cog.get_formatted_duration(entry.get('duration'))
                 ),
                 inline=False
             )
@@ -349,7 +386,7 @@ class SearchEmbed(Embed):
 
 
 class QueueEmbed(Embed):
-    def __init__(self, queue: dict, guild_id: int, icon_url: str):
+    def __init__(self, queue: dict, guild_id: int):
         super().__init__(title='Очередь')
 
         if queue[guild_id][1:]:
@@ -370,7 +407,7 @@ class QueueEmbed(Embed):
             )
         self.set_footer(
             text='YouTube',
-            icon_url=icon_url
+            icon_url='https://cdn1.iconfinder.com/data/icons/logotypes/32/youtube-512.png'
         )
 
 
@@ -378,7 +415,7 @@ class TrackEmbed(Embed):
     def __init__(self, source: dict, user: Member, icon_url: str):
         super().__init__(title=source['title'], url=source['original_url'])
 
-        self.add_field(name='Запрошено пользователем :', value=f'`{user.split("#")[0]}`', inline=True)
+        self.add_field(name='Запрошено пользователем :', value=f'`{user}`', inline=True)
         self.add_field(name='Длительность :', value='`{}`'.format(source['duration']), inline=True)
         self.set_footer(text='YouTube', icon_url=icon_url)
 
@@ -387,7 +424,7 @@ class PlayNowEmbed(TrackEmbed):
     def __init__(self, source: dict, user: Member, icon_url: str):
         super().__init__(source, user, icon_url)
 
-        self.color = 15548997
+        self.colour = 15548997
         self.set_author(name=source['channel'], url=source['channel_url'])
         self.set_image(url=source['thumbnail'])
 
