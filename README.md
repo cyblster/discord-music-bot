@@ -14,8 +14,12 @@
 
 ```pip install -r requirements.txt```.
 
+Установите FFMPEG
+
+```https://github.com/GyanD/codexffmpeg/archive/refs/tags/2023-07-16-git-c541ecf0dc.zip```
+
 ## Использование
 
-Отредактируйте файл ```sample.env``` и переименнуйте его в ```.env```.
+Отредактируйте файл ```.env.test``` и переименнуйте его в ```.env```.
 
-Запустите ```runner.py```.
+Запустите ```main.py```.
