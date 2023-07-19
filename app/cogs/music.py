@@ -192,10 +192,13 @@ class MusicCog(commands.Cog):
                 await interaction.response.defer(ephemeral=True)
 
                 entries = ydl.extract_info(f'ytsearch5:{search}', download=False)['entries']
-                await interaction.followup.send(
-                    embed=SearchEmbed(self, entries),
-                    view=MusicSelectView(self, interaction, entries)
-                )
+                if entries:
+                    await interaction.followup.send(
+                        embed=SearchEmbed(self, entries),
+                        view=MusicSelectView(self, interaction, entries)
+                    )
+                else:
+                    await interaction.followup.send('❌ По вашему запросу ничего не найдено')
 
     @discord.app_commands.command(name='skip', description='Пропустить текущий трек')
     async def command_skip(self, interaction: Interaction) -> None:
@@ -269,7 +272,7 @@ class MusicSelect(Select):
         super().__init__(placeholder='Выберите нужное', options=[
             discord.SelectOption(label='{}. {}'.format(
                 i + 1,
-                MusicCog.get_formatted_option(entry['title'])), value=str(i)
+                MusicCog.get_formatted_option(f'{entry["channel"]} - {entry["title"]}')), value=str(i)
             )
             for i, entry in enumerate(self.__entries)
         ])
@@ -371,8 +374,9 @@ class SearchEmbed(Embed):
         for i, entry in enumerate(yt_entries, 1):
             self.add_field(
                 name='\u200b',
-                value='**{}.** [{}]({}) ({})'.format(
+                value='**{}.** {} - [{}]({}) ({})'.format(
                     i,
+                    entry['channel'],
                     entry['title'],
                     entry['original_url'],
                     self.__cog.get_formatted_duration(entry.get('duration'))
