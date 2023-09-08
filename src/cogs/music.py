@@ -19,6 +19,8 @@ class MusicCog(commands.Cog):
         'options': '-vn'
     }
     YDL_OPTIONS = {
+        'cookiesfrombrowser': 'chrome',
+        'http_headers': {'Referer': 'googlevideo.com'},
         'format': 'bestaudio/best',
         'noplaylist': True,
         'quiet': True
