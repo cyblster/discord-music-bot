@@ -293,7 +293,7 @@ class MusicSelectViewDisabled(View):
     def __init__(self):
         super().__init__()
 
-        self.add_item(Select(options=[discord.SelectOption(label='')], disabled=True))
+        self.add_item(Select(options=[discord.SelectOption(label='...')], disabled=True))
 
 
 class MusicControlView(View):
