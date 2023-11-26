@@ -357,7 +357,7 @@ class NothingPlayEmbed(discord.Embed):
 
 class PlayNowEmbed(discord.Embed):
     def __init__(self, track: TrackAbstract):
-        super().__init__(title=track.title, url=track.url)
+        super().__init__(title=track.title, url=track.original_url)
 
         self.set_author(name=track.channel, url=track.channel_url)
         self.set_image(url=track.thumbnail)
