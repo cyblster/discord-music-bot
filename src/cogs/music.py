@@ -244,6 +244,8 @@ class OrderTrackModal(discord.ui.Modal):
         self.add_item(discord.ui.TextInput(label='Введите строку для поиска или URL'))
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
         with YoutubeDL(self.cog.YDL_OPTIONS) as ydl:
             self.cog.add_track_to_queue(
                 interaction.guild_id,
@@ -252,8 +254,6 @@ class OrderTrackModal(discord.ui.Modal):
                     **ydl.extract_info(self.children[0].value, download=False)
                 })
             )
-
-            await interaction.response.defer()
 
             if self.cog.is_first_track(interaction.guild_id):
                 await self.cog.play_track(interaction.guild, first_track=True)
