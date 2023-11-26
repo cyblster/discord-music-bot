@@ -239,7 +239,7 @@ class OrderTrackModal(discord.ui.Modal):
     def __init__(self, cog: MusicCog):
         self.cog = cog
 
-        super().__init__(title='Добавить трек в очередь', timeout=60)
+        super().__init__(title='Добавить трек в очередь', timeout=None)
 
         self.add_item(discord.ui.TextInput(label='Введите строку для поиска или URL'))
 
