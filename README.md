@@ -6,13 +6,11 @@
 
 Используйте git для клонирования репозитория
 
-```git clone https://github.com/cyblster/discord-music-bot.git```
+```git clone https://github.com/cyblster/discord-music-bot.git``` или загрузите и распакуйте zip архив.
 
-или загрузите и распакуйте zip архив.
+Установите docker
 
-Установите зависимости
-
-```pip install -r requirements.txt```.
+```https://www.docker.com/```.
 
 Установите FFMPEG
 
@@ -20,6 +18,6 @@
 
 ## Использование
 
-Отредактируйте файл ```.env.test``` и переименнуйте его в ```.env```.
+Отредактируйте файл ```.env.sample``` и переименнуйте его в ```.env```.
 
-Запустите ```main.py```.
+Внутри репозитория выполните команду ```docker compose up```.

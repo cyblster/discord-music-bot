@@ -1,6 +1,6 @@
-from src.core import Bot
-from src.config import BaseConfig
+from src.main import Bot
+from src.configs import BotConfig
 
 
 if __name__ == '__main__':
-    Bot(BaseConfig.TOKEN)
+    Bot(BotConfig.TOKEN)
