@@ -305,6 +305,13 @@ class NothingPlayView(PlayView):
     async def btn_disconnect(self, interaction: discord.Interaction, button: discord.Button):
         pass
 
+    async def on_timeout(self) -> None:
+        music_model = await MusicModel.get_by_guild_id(self.guild.id)
+        channel = self.cog.bot.get_channel(music_model.channel_id)
+        track_message = await channel.fetch_message(music_model.track_message_id)
+
+        await track_message.edit(view=NothingPlayView(self.cog, self.guild))
+
 
 class PlayNowView(PlayView):
     def __init__(self, cog: MusicCog, guild: discord.Guild):
