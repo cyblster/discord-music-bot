@@ -310,7 +310,8 @@ class NothingPlayView(PlayView):
         channel = self.cog.bot.get_channel(music_model.channel_id)
         track_message = await channel.fetch_message(music_model.track_message_id)
 
-        await track_message.edit(view=NothingPlayView(self.cog, self.guild))
+        if self.cog.is_queue_empty(music_model.guild_id):
+            await track_message.edit(view=NothingPlayView(self.cog, self.guild))
 
 
 class PlayNowView(PlayView):
@@ -340,7 +341,8 @@ class PlayNowView(PlayView):
         channel = self.cog.bot.get_channel(music_model.channel_id)
         track_message = await channel.fetch_message(music_model.track_message_id)
 
-        await track_message.edit(view=PlayNowView(self.cog, self.guild))
+        if not self.cog.is_queue_empty(music_model.guild_id):
+            await track_message.edit(view=PlayNowView(self.cog, self.guild))
 
 
 class NothingPlayEmbed(discord.Embed):
