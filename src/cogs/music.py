@@ -2,10 +2,11 @@ from typing import List, Dict, Optional
 
 import asyncio
 import discord
+import yt_dlp
 import dataclasses
+import validators
 
 from datetime import datetime, timedelta
-from yt_dlp import YoutubeDL
 
 from src.models import MusicModel
 
@@ -32,6 +33,8 @@ class EmojiMapping:
     SpeechBalloon = '💬'
     SkipTrack = '⏭'
     NoEntry = '⛔'
+    MagRight = '🔎'
+    Link = '🔗'
 
 
 class MusicCog(discord.ext.commands.Cog):
@@ -79,6 +82,10 @@ class MusicCog(discord.ext.commands.Cog):
 
         dt -= timedelta(days=1)
         return dt.strftime('%d:%H:%M:%S')
+
+    @staticmethod
+    def get_formatted_option(option: str) -> str:
+        return option[:90]
 
     async def connect_to_user(self, user: discord.Member) -> None:
         if not self.bot.get_guild(user.guild.id).voice_client:
@@ -244,23 +251,49 @@ class OrderTrackModal(discord.ui.Modal):
         self.add_item(discord.ui.TextInput(label='Введите строку для поиска или URL'))
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True, thinking=True)
 
-        with YoutubeDL(self.cog.YDL_OPTIONS) as ydl:
-            self.cog.add_track_to_queue(
-                interaction.guild_id,
-                TrackAbstract.from_dict({
-                    **{'user': interaction.user},
-                    **ydl.extract_info(self.children[0].value, download=False)
-                })
-            )
+        with yt_dlp.YoutubeDL(self.cog.YDL_OPTIONS) as ydl:
+            if validators.url(self.children[0].value):
+                try:
+                    ydl_entry = ydl.extract_info(self.children[0].value, download=False)
+                except yt_dlp.DownloadError:
+                    await interaction.followup.send(f'{EmojiMapping.Link} По вашему URL ничего не найдено.')
+                    await asyncio.sleep(10)
+                finally:
+                    await interaction.delete_original_response()
 
-            if self.cog.is_first_track(interaction.guild_id):
-                await self.cog.play_track(interaction.guild, first_track=True)
+                self.cog.add_track_to_queue(
+                    interaction.guild_id,
+                    TrackAbstract.from_dict({
+                        **{'user': interaction.user},
+                        **ydl_entry
+                    })
+                )
+                if self.cog.is_first_track(interaction.guild_id):
+                    await self.cog.play_track(interaction.guild, first_track=True)
+                else:
+                    music_model = await MusicModel.get_by_guild_id(interaction.guild_id)
+                    queue_message = await interaction.channel.fetch_message(music_model.queue_message_id)
+                    await queue_message.edit(embed=QueueEmbed(self.cog.queue[interaction.guild_id]))
+
             else:
-                music_model = await MusicModel.get_by_guild_id(interaction.guild_id)
-                queue_message = await interaction.channel.fetch_message(music_model.queue_message_id)
-                await queue_message.edit(embed=QueueEmbed(self.cog.queue[interaction.guild_id]))
+                ydl_entries = ydl.extract_info(f'ytsearch5:{self.children[0].value}', download=False)['entries']
+                if ydl_entries:
+                    tracks = [
+                        TrackAbstract.from_dict({
+                            **{'user': interaction.user},
+                            **ydl_entry
+                        }) for ydl_entry in ydl_entries
+                    ]
+                    await interaction.followup.send(
+                        embed=TrackSelectEmbed(tracks),
+                        view=TrackSelectView(self.cog, interaction, tracks)
+                    )
+                else:
+                    await interaction.followup.send(f'{EmojiMapping.MagRight} По вашему запросу ничего не найдено.')
+                    await asyncio.sleep(10)
+                    await interaction.delete_original_response()
 
 
 class PlayView(discord.ui.View):
@@ -345,6 +378,49 @@ class PlayNowView(PlayView):
             await track_message.edit(view=PlayNowView(self.cog, self.guild))
 
 
+class TrackSelectView(discord.ui.View):
+    def __init__(self, cog: MusicCog, interaction: discord.Interaction, tracks: List[TrackAbstract]):
+        self.interaction = interaction
+
+        super().__init__(timeout=30)
+
+        self.add_item(TrackSelect(cog, interaction, tracks))
+
+    async def on_timeout(self) -> None:
+        if self.interaction:
+            await self.interaction.delete_original_response()
+
+
+class TrackSelect(discord.ui.Select):
+    def __init__(self, cog: MusicCog, interaction, tracks: List[TrackAbstract]):
+        self.cog = cog
+        self.interaction = interaction
+        self.tracks = tracks
+
+        super().__init__(placeholder='Выберите нужное', options=[
+            discord.SelectOption(label='{}. {}'.format(
+                i + 1,
+                MusicCog.get_formatted_option(f'{track.channel} - {track.title}')), value=str(i)
+            )
+            for i, track in enumerate(self.tracks)
+        ])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.interaction.delete_original_response()
+
+        self.cog.add_track_to_queue(
+            interaction.guild_id,
+            self.tracks[int(self.values[0])]
+        )
+
+        if self.cog.is_first_track(interaction.guild_id):
+            await self.cog.play_track(interaction.guild, first_track=True)
+        else:
+            music_model = await MusicModel.get_by_guild_id(interaction.guild_id)
+            queue_message = await interaction.channel.fetch_message(music_model.queue_message_id)
+            await queue_message.edit(embed=QueueEmbed(self.cog.queue[interaction.guild_id]))
+
+
 class NothingPlayEmbed(discord.Embed):
     def __init__(self):
         super().__init__(title=f'Сейчас ничего не играет')
@@ -369,6 +445,29 @@ class PlayNowEmbed(discord.Embed):
 
         self.colour = 15548997
         self.set_footer(text='YouTube', icon_url=MusicCog.YOUTUBE_LOGO_URL)
+
+
+class TrackSelectEmbed(discord.Embed):
+    def __init__(self, tracks: List[TrackAbstract]):
+        super().__init__(title='Результаты поиска :')
+
+        for i, track in enumerate(tracks, 1):
+            self.add_field(
+                name='\u200b',
+                value='**{}.** {} - [{}]({}) ({})'.format(
+                    i,
+                    track.channel,
+                    track.title,
+                    track.original_url,
+                    MusicCog.get_formatted_duration(track.duration)
+                ),
+                inline=False
+            )
+
+        self.set_footer(
+            text='YouTube',
+            icon_url=MusicCog.YOUTUBE_LOGO_URL
+        )
         
         
 class QueueEmbed(discord.Embed):
