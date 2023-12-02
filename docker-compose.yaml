@@ -6,7 +6,7 @@ services:
       TOKEN: ${BOT_TOKEN}
     build: .
     depends_on:
-      db:
+      discord-music-db:
         condition: service_healthy
     restart: always
 
