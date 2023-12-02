@@ -6,6 +6,7 @@ import yt_dlp
 import dataclasses
 import validators
 
+from discord.ext import commands
 from datetime import datetime, timedelta
 
 from src.models import MusicModel
@@ -49,10 +50,9 @@ class MusicCog(discord.ext.commands.Cog):
     }
     YOUTUBE_LOGO_URL = 'https://cdn1.iconfinder.com/data/icons/logotypes/32/youtube-512.png'
 
-    bot: discord.ext.commands.Bot
     queue: Dict[int, List[TrackAbstract]]
 
-    def __init__(self, bot: discord.ext.commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
 
         self.queue = {guild.id: [] for guild in self.bot.guilds}
@@ -222,6 +222,12 @@ class MusicCog(discord.ext.commands.Cog):
                 delete_after=10
             )
 
+        self.bot.logger.info('Server: [{}], user: {} ({}), action: use /setup command.'.format(
+            interaction.guild.name,
+            interaction.user.name,
+            interaction.user.nick
+        ))
+
         await interaction.channel.edit(
             topic=f'Канал музыкального бота {self.bot.user.name.split("#")[0]}',
             overwrites={interaction.guild.default_role: discord.PermissionOverwrite(send_messages=False)}
@@ -270,6 +276,13 @@ class OrderTrackModal(discord.ui.Modal):
                         **ydl_entry
                     })
                 )
+
+                self.cog.bot.logger.info('Server: [{}], user: {} ({}), action: add track to queue.'.format(
+                    interaction.guild.name,
+                    interaction.user.name,
+                    interaction.user.nick
+                ))
+
                 if self.cog.is_first_track(interaction.guild_id):
                     await self.cog.play_track(interaction.guild, first_track=True)
                 else:
@@ -358,6 +371,12 @@ class PlayNowView(PlayView):
         if self.cog.is_user_with_bot(interaction.user):
             self.cog.skip_track(interaction.guild)
 
+            self.cog.bot.logger.info('Server: [{}], user: {} ({}), action: Clicked the "Skip" button.'.format(
+                interaction.guild.name,
+                interaction.user.name,
+                interaction.user.nick
+            ))
+
     @discord.ui.button(label='\u200b', style=discord.ButtonStyle.gray, disabled=True)
     async def btn_stub(self, interaction: discord.Interaction, button: discord.Button):
         pass
@@ -368,6 +387,12 @@ class PlayNowView(PlayView):
 
         if self.cog.is_user_with_bot(interaction.user):
             await self.cog.disconnect_from_guild(interaction.guild)
+
+            self.cog.bot.logger.info('Server: [{}], user: {} ({}), action: Clicked the "Disconnect" button.'.format(
+                interaction.guild.name,
+                interaction.user.name,
+                interaction.user.nick
+            ))
 
     async def on_timeout(self) -> None:
         music_model = await MusicModel.get_by_guild_id(self.guild.id)
@@ -412,6 +437,12 @@ class TrackSelect(discord.ui.Select):
             interaction.guild_id,
             self.tracks[int(self.values[0])]
         )
+
+        self.cog.bot.logger.info('Server: [{}], user: {} ({}), action: add track to queue.'.format(
+            interaction.guild.name,
+            interaction.user.name,
+            interaction.user.nick
+        ))
 
         if self.cog.is_first_track(interaction.guild_id):
             await self.cog.play_track(interaction.guild, first_track=True)
