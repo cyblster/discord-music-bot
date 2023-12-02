@@ -8,7 +8,7 @@ load_dotenv()
 class BotConfig:
     TOKEN = os.getenv('BOT_TOKEN')
 
-    DEBUG = bool(os.getenv('DEBUG'))
+    DEBUG = bool(int(os.getenv('DEBUG')))
 
 
 class DatabaseConfig:
