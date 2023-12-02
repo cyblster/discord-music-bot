@@ -1,6 +1,6 @@
 version: '2.0.0'
 services:
-  bot:
+  discord-music-bot:
     container_name: "discord-music-bot"
     environment:
       TOKEN: ${BOT_TOKEN}
@@ -10,7 +10,7 @@ services:
         condition: service_healthy
     restart: always
 
-  db:
+  discord-music-db:
     container_name: "discord-music-db"
     image: postgres:15
     environment:
