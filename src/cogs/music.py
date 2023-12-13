@@ -193,19 +193,20 @@ class MusicCog(discord.ext.commands.Cog):
                 music_model = await MusicModel.get_by_guild_id(before.channel.guild.id)
                 channel = self.bot.get_channel(music_model.channel_id)
 
-                voice_client = self.bot.get_guild(music_model.guild_id).voice_client
-                if voice_client:
-                    voice_client.cleanup()
-                    track_message = await channel.fetch_message(music_model.track_message_id)
-                    await track_message.edit(
-                        embed=NothingPlayEmbed(),
-                        view=NothingPlayView(self, before.channel.guild)
-                    )
+                track_message = await channel.fetch_message(music_model.track_message_id)
+                await track_message.edit(
+                    embed=NothingPlayEmbed(),
+                    view=NothingPlayView(self, before.channel.guild)
+                )
 
                 if self.queue[before.channel.guild.id]:
                     self.clear_queue(before.channel.guild.id)
                     queue_message = await channel.fetch_message(music_model.queue_message_id)
                     await queue_message.edit(embed=QueueEmbed(self.queue[before.channel.guild.id]))
+
+                voice_client = self.bot.get_guild(music_model.guild_id).voice_client
+                if voice_client:
+                    voice_client.cleanup()
 
         elif before.channel:
             voice_client = before.channel.guild.voice_client
