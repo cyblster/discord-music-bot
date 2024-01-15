@@ -36,6 +36,7 @@ class EmojiMapping:
     NoEntry = '⛔'
     MagRight = '🔎'
     Link = '🔗'
+    Pencil = '📝'
 
 
 class MusicCog(discord.ext.commands.Cog):
@@ -111,6 +112,9 @@ class MusicCog(discord.ext.commands.Cog):
 
     def is_queue_empty(self, guild_id: int) -> bool:
         return len(self.queue[guild_id]) == 0
+
+    def is_queue_full(self, guild_id: int) -> bool:
+        return len(self.queue[guild_id]) == 25
 
     def add_track_to_queue(self, guild_id, track: TrackAbstract):
         self.queue[guild_id].append(track)
@@ -260,36 +264,49 @@ class OrderTrackModal(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
 
+        tracks = []
         with yt_dlp.YoutubeDL(self.cog.YDL_OPTIONS) as ydl:
             if validators.url(self.children[0].value):
                 try:
                     ydl_entry = ydl.extract_info(self.children[0].value, download=False)
+                    if 'entries' in ydl_entry:
+                        tracks.extend(ydl_entry['entries'])
+                    else:
+                        tracks.append(ydl_entry)
+
                 except yt_dlp.DownloadError:
                     await interaction.followup.send(f'{EmojiMapping.Link} По вашему URL ничего не найдено.')
                     await asyncio.sleep(10)
-                finally:
-                    await interaction.delete_original_response()
 
-                self.cog.add_track_to_queue(
-                    interaction.guild_id,
-                    TrackAbstract.from_dict({
-                        **{'user': interaction.user},
-                        **ydl_entry
-                    })
-                )
+                for track in tracks:
+                    if not self.cog.is_queue_full(interaction.guild_id):
+                        self.cog.add_track_to_queue(
+                            interaction.guild_id,
+                            TrackAbstract.from_dict({
+                                **{'user': interaction.user},
+                                **track
+                            })
+                        )
+
+                        if self.cog.is_first_track(interaction.guild_id):
+                            await self.cog.play_track(interaction.guild, first_track=True)
+                        else:
+                            music_model = await MusicModel.get_by_guild_id(interaction.guild_id)
+                            queue_message = await interaction.channel.fetch_message(music_model.queue_message_id)
+                            await queue_message.edit(embed=QueueEmbed(self.cog.queue[interaction.guild_id]))
+
+                    else:
+                        await interaction.followup.send(f'{EmojiMapping.Pencil} Очередь на этом сервере заполнена.')
+                        await asyncio.sleep(10)
+                        break
+
+                await interaction.delete_original_response()
 
                 self.cog.bot.logger.info('Server: [{}], user: {} ({}), action: add track to queue.'.format(
                     interaction.guild.name,
                     interaction.user.name,
                     interaction.user.nick
                 ))
-
-                if self.cog.is_first_track(interaction.guild_id):
-                    await self.cog.play_track(interaction.guild, first_track=True)
-                else:
-                    music_model = await MusicModel.get_by_guild_id(interaction.guild_id)
-                    queue_message = await interaction.channel.fetch_message(music_model.queue_message_id)
-                    await queue_message.edit(embed=QueueEmbed(self.cog.queue[interaction.guild_id]))
 
             else:
                 ydl_entries = ydl.extract_info(f'ytsearch5:{self.children[0].value}', download=False)['entries']
@@ -329,6 +346,13 @@ class PlayView(discord.ui.View):
         if not self.cog.is_queue_empty(interaction.guild_id) and not self.cog.is_user_with_bot(interaction.user):
             return await interaction.response.send_message(
                 f'{EmojiMapping.NoEntry} Бот уже подключен к голосовому каналу сервера.',
+                ephemeral=True,
+                delete_after=10
+            )
+
+        if self.cog.is_queue_full(interaction.guild_id):
+            return await interaction.response.send_message(
+                f'{EmojiMapping.Pencil} Очередь на этом сервере заполнена.',
                 ephemeral=True,
                 delete_after=10
             )
@@ -472,7 +496,7 @@ class PlayNowEmbed(discord.Embed):
         self.set_author(name=track.channel, url=track.channel_url)
         self.set_image(url=track.thumbnail)
 
-        self.add_field(name='Запрошено пользователем :', value=f'`{track.user}`', inline=True)
+        self.add_field(name='Запрошено пользователем :', value=f'`{track.user.nick or track.user.name}`', inline=True)
         self.add_field(name='Длительность :', value='`{}`'.format(MusicCog.get_formatted_duration(track.duration)), inline=True)
 
         self.colour = 15548997
